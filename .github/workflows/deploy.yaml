@@ -1,0 +1,44 @@
+name: Deploy to AWS ECS
+on:
+  push:
+    branches: [main]
+
+# Need ID token write permission to use OIDC
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read # This is required for actions/checkout
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@main # Or a specific version
+        with:
+          role-to-assume: ${{ vars.ASSUME_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Hello from AWS: WhoAmI
+      - name: Sts GetCallerIdentity
+        run: |
+          aws sts get-caller-identity
+
+      # - name: Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v3
+      # - name: Login to Amazon ECR
+      #   uses: aws-actions/amazon-ecr-login@v2
+      # - name: Build and Push Docker image to ECR
+      #   run: |
+      #     docker buildx build \
+      #       --platform linux/amd64 \
+      #       -t ${{ vars.ECR_REPO }}:stable \
+      #       --push .
+      # - name: Force ECS service to redeploy
+      #   run: |
+      #     aws ecs update-service \
+      #       --cluster ${{ vars.ECS_CLUSTER }} \
+      #       --service ${{ vars.ECS_SERVICE }} \
+      #       --force-new-deployment
