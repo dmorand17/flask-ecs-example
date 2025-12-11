@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def hello():
-    return "Hello from Flask on ECS v1"
+    return "Hello from Flask on ECS v2"
 
 
 @app.route("/health")
