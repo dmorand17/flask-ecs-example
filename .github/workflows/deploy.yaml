@@ -3,6 +3,12 @@ name: Deploy to AWS ECS
 on:
   push:
     branches: [main]
+    paths:
+      - "app/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "Dockerfile*"
+      - ".github/workflows/deploy.yaml"
   workflow_dispatch: # Allow manual triggering
 
 # Need ID token write permission to use OIDC
@@ -78,18 +84,6 @@ jobs:
               "image": "${{ vars.ECR_REPO }}:${{ needs.build.outputs.image-tag }}"
             }'
 
-      - name: Wait for deployment to complete
-        run: |
-          echo "Waiting for service to stabilize..."
-          SERVICE_NAME=$(echo "${{ vars.ECS_SERVICE_ARN }}" | awk -F'/' '{print $NF}')
-          CLUSTER_ARN=$(aws ecs describe-services --services "${{ vars.ECS_SERVICE_ARN }}" --query 'services[0].clusterArn' --output text)
-
-          aws ecs wait services-stable \
-            --cluster "${CLUSTER_ARN}" \
-            --services "${SERVICE_NAME}"
-
-          echo "✅ Deployment completed successfully!"
-
       - name: Get service URL
         id: get-url
         run: |
@@ -111,3 +105,5 @@ jobs:
           echo "- **Region:** us-east-1" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployed By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** ECS deployment initiated. New tasks will become healthy once health checks pass (~30-60 seconds)." >> $GITHUB_STEP_SUMMARY

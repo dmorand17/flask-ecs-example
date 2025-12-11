@@ -6,6 +6,8 @@ A simple example of deploying a Flask application on AWS ECS using [Express Mode
 
 This project demonstrates how to containerize a Flask application and deploy it to AWS ECS using Express Mode, which simplifies the deployment process by automatically managing load balancers, networking, and scaling configuration.
 
+**Continuous Deployment:** This project uses GitHub Actions to automatically build and deploy your application to ECS whenever code is pushed to the `main` branch. See the [CI/CD](#cicd-with-github-actions) section for details.
+
 ## Development
 
 ### Requirements
@@ -15,7 +17,7 @@ Before you begin, ensure you have the following tools installed:
 - **Python 3.14+** - The application runtime
 - **Docker** - For containerization and local testing
 - **[uv](https://docs.astral.sh/uv/)** - Fast Python package installer and resolver (for dependency management)
-- **AWS CLI** - For interacting with AWS services during deployment
+- **AWS CLI** - For interacting with AWS services during deployment (optional for local dev)
 
 Optional tools:
 - **[docker buildx](https://docs.docker.com/buildx/working-with-buildx/)** - For multi-platform builds (usually included with Docker Desktop)
@@ -40,19 +42,53 @@ Lock dependencies in `requirements.txt`:
 uv pip compile pyproject.toml -o requirements.txt
 ```
 
-## Testing
+### Manual Build and Push to ECR
 
-Once the container is running locally, you can test the health endpoint:
+If you need to manually build and push an image to ECR (for testing or troubleshooting), follow these steps:
 
 ```bash
+# Get your AWS account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# Login to ECR - authenticate Docker to your private ECR registry
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin \
+  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+
+# Build the image for linux/amd64 platform (required for ECS)
+# We use buildx to ensure cross-platform compatibility
+# Option 1: Build using standard Dockerfile (traditional pip-based installation)
+docker buildx build --platform linux/amd64 -t flask-ecs-app .
+
+# Option 2: Build using Dockerfile with UV package manager (faster builds)
+docker buildx build --platform linux/amd64 -f Dockerfile-uv -t flask-ecs-app .
+
+# Tag the image with your ECR repository URL
+# This formats the image name to match ECR's naming convention
+docker tag flask-ecs-app:latest \
+  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
+
+# Push the image to ECR so ECS can pull it during deployment
+docker push $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
+```
+
+**Note:** The `--platform linux/amd64` flag is important because ECS tasks run on Linux AMD64 architecture. Without this flag, images built on Apple Silicon (ARM) Macs won't run correctly on ECS.
+
+## Testing
+
+Once the container is running locally, you can test the endpoints:
+
+```bash
+# Test the default route
+curl http://localhost:5000/
+
+# Test the health check endpoint
 curl http://localhost:5000/health
 ```
 
-## Deployment
+Both endpoints return JSON responses.
 
-This project provides two approaches for deployment:
-1. **Automated Scripts** - Use helper scripts in `scripts/ecs-express/` for simplified deployment
-2. **Manual Commands** - Run AWS CLI commands directly for more control
+## Deployment
 
 ### Prerequisites
 
@@ -60,10 +96,11 @@ This project provides two approaches for deployment:
 - Docker installed and running
 - ECR repository created (`flask-ecs-example`)
 - Required IAM roles (see setup instructions below)
+- GitHub repository with Actions enabled (for CI/CD)
 
-### Option 1: Using Deployment Scripts (Recommended)
+### Initial Setup with Deployment Scripts
 
-The `scripts/ecs-express/` directory contains helper scripts to streamline the deployment process.
+The `scripts/ecs-express/` directory contains helper scripts to streamline the initial deployment setup.
 
 #### Step 1: Create Required IAM Roles
 
@@ -97,41 +134,42 @@ This script will:
 - Set up health checks on the `/health` endpoint
 - Allocate 1024 CPU units and 2048 MB memory per task
 
-### Option 2: Manual Deployment with AWS CLI
+**Note:** ECS Express Mode manages health check configuration automatically. The service will perform health checks on the `/health` endpoint with AWS-managed defaults.
 
-If you prefer more control or need to customize the deployment, you can run the AWS CLI commands directly.
+### CI/CD with GitHub Actions
 
-#### Build and Push Image to ECR
+Once your ECS service is created, GitHub Actions will automatically handle deployments when you push code to the `main` branch.
 
-This section covers building your Docker image for the ECS deployment platform and pushing it to Amazon Elastic Container Registry (ECR).
+#### Workflow Overview
 
-```bash
-# Get your AWS account ID
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+The deployment workflow (`.github/workflows/deploy.yaml`) consists of two jobs:
 
-# Login to ECR - authenticate Docker to your private ECR registry
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin \
-  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+1. **Build Job** - Builds the Docker image and pushes it to ECR with a unique tag (commit SHA + timestamp)
+2. **Deploy Job** - Updates the ECS service with the new image and waits for the deployment to stabilize
 
-# Build the image for linux/amd64 platform (required for ECS)
-# We use buildx to ensure cross-platform compatibility
-# Option 1: Build using standard Dockerfile (traditional pip-based installation)
-docker buildx build --platform linux/amd64 -t flask-ecs-app .
+#### Required GitHub Secrets and Variables
 
-# Option 2: Build using Dockerfile with UV package manager (faster builds)
-docker buildx build --platform linux/amd64 -f Dockerfile-uv -t flask-ecs-app .
+Configure the following in your GitHub repository settings:
 
-# Tag the image with your ECR repository URL
-# This formats the image name to match ECR's naming convention
-docker tag flask-ecs-app:latest \
-  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
+**Variables** (Settings → Secrets and variables → Actions → Variables):
+- `ASSUME_ROLE_ARN` - ARN of the IAM role for OIDC authentication (e.g., `arn:aws:iam::123456789012:role/GitHubActionsRole`)
+- `ECR_REPO` - Full ECR repository URI (e.g., `123456789012.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example`)
+- `ECS_SERVICE_ARN` - ARN of your ECS service (e.g., `arn:aws:ecs:us-east-1:123456789012:service/app-cluster/flask-ecs-app`)
 
-# Push the image to ECR so ECS can pull it during deployment
-docker push $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
-```
+#### How It Works
 
-**Note:** The `--platform linux/amd64` flag is important because ECS tasks run on Linux AMD64 architecture. Without this flag, images built on Apple Silicon (ARM) Macs won't run correctly on ECS.
+1. **Push to main branch** - Any commit to `main` triggers the workflow
+2. **Build & Push** - Docker image is built and pushed to ECR with a unique tag
+3. **Deploy** - ECS service is updated with the new image
+4. **Summary** - Deployment details are shown in the GitHub Actions UI
+
+#### Manual Triggering
+
+You can also manually trigger a deployment from the GitHub Actions tab using the "Run workflow" button.
+
+### Manual Deployment with AWS CLI
+
+If you prefer to deploy manually or need to customize the deployment, you can use the AWS CLI commands directly.
 
 #### Create IAM Roles (First Time Only)
 
@@ -211,9 +249,42 @@ aws ecs update-express-gateway-service \
   }'
 ```
 
+## Troubleshooting
+
+### Slow Health Checks
+
+If your ECS service is taking too long to show as healthy during deployments:
+
+1. **Ensure your Flask app starts quickly** - Your application should respond to `/health` immediately after starting
+2. **Verify the health endpoint returns 200 OK** - Test locally: `curl http://localhost:5000/health`
+3. **Monitor CloudWatch logs** - Check for startup errors or slow initialization
+4. **Check task startup time** - View the ECS console to see how long tasks take to reach RUNNING state
+
+ECS Express Mode uses AWS-managed health check settings that cannot be customized directly. The typical time to healthy status is 30-60 seconds.
+
+### Deployment Failures
+
+If deployments fail or tasks keep restarting:
+
+1. **Check CloudWatch Logs** - View container logs for errors in the AWS Console
+2. **Verify ECR image** - Ensure the image was pushed successfully and is accessible
+3. **Check IAM roles** - Verify `ecsTaskExecutionRole` has ECR pull permissions
+4. **Test locally** - Always test with `docker run` before deploying to ECS
+5. **Review GitHub Actions logs** - Check the workflow run for detailed error messages
+
+### GitHub Actions Failures
+
+If the GitHub Actions workflow fails:
+
+1. **Check GitHub Variables** - Ensure `ASSUME_ROLE_ARN`, `ECR_REPO`, and `ECS_SERVICE_ARN` are set correctly
+2. **Verify OIDC Configuration** - Ensure your AWS IAM role trusts GitHub's OIDC provider
+3. **Check IAM Permissions** - The assumed role needs permissions for ECR push and ECS update operations
+4. **Review workflow logs** - Click on the failed job in GitHub Actions for detailed error messages
+
 ## References
 
 - [AWS ECS Express Service Getting Started Guide](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-getting-started.html)
 - [AWS ECS Express Mode Overview](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-overview.html)
 - [Automating Deployment of Flask to AWS ECS with GitHub Actions](https://hbayraktar.medium.com/automating-deployment-of-a-flask-application-to-aws-ecs-with-github-actions-c256192eb8ad)
 - [Deep Dive into uv Dockerfiles by Astral: Image Size, Performance & Best Practices](https://medium.com/@benitomartin/deep-dive-into-uv-dockerfiles-by-astral-image-size-performance-best-practices-5790974b9579)
+- [Configuring OpenID Connect in Amazon Web Services](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
