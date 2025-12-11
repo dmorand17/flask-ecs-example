@@ -15,6 +15,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Use a stored repository variable
+        run: echo "The ASSUME_ROLE_ARN is ${{ vars.ASSUME_ROLE_ARN }}"
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@main # Or a specific version
         with:
