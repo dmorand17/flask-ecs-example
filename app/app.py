@@ -1,16 +1,18 @@
-from flask import Flask
+from flask import Flask, jsonify
 
 app = Flask(__name__)
 
 
 @app.route("/")
 def hello():
-    return "Hello from Flask on ECS v2"
+    return jsonify(
+        {"message": "Hello from Flask on ECS", "version": "v2", "status": "running"}
+    )
 
 
 @app.route("/health")
 def health():
-    return "App is healthy!"
+    return jsonify({"status": "healthy", "service": "flask-ecs-app"})
 
 
 if __name__ == "__main__":
