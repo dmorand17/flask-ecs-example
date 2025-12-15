@@ -18,7 +18,26 @@ This project demonstrates how to containerize a Flask application and deploy it 
 - Required IAM roles (see setup instructions below)
 - GitHub repository with Actions enabled (for CI/CD)
 
-### Initial Setup with Deployment Scripts
+### Option 1 - Setup using Terraform
+
+#### State Management
+
+This project uses an S3 bucket for Terraform state management. Before running Terraform, you need to create an S3 bucket and DynamoDB table for state locking.
+
+1. Create an S3 bucket for Terraform state:
+
+```bash
+BUCKET_NAME=tfstate-$(aws sts get-caller-identity --query Account --output text)
+aws s3api create-bucket \
+    --bucket $BUCKET_NAME \
+    --region us-east-1
+
+aws s3api put-bucket-versioning \
+    --bucket $BUCKET_NAME \
+    --versioning-configuration Status=Enabled
+```
+
+### Option 2 - Setup using Deployment Scripts
 
 The `scripts/ecs-express/` directory contains helper scripts to streamline the initial deployment setup.
 
