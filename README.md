@@ -8,86 +8,6 @@ This project demonstrates how to containerize a Flask application and deploy it 
 
 **Continuous Deployment:** This project uses GitHub Actions to automatically build and deploy your application to ECS whenever code is pushed to the `main` branch. See the [CI/CD](#cicd-with-github-actions) section for details.
 
-## Development
-
-### Requirements
-
-Before you begin, ensure you have the following tools installed:
-
-- **Python 3.14+** - The application runtime
-- **Docker** - For containerization and local testing
-- **[uv](https://docs.astral.sh/uv/)** - Fast Python package installer and resolver (for dependency management)
-- **AWS CLI** - For interacting with AWS services during deployment (optional for local dev)
-
-Optional tools:
-- **[docker buildx](https://docs.docker.com/buildx/working-with-buildx/)** - For multi-platform builds (usually included with Docker Desktop)
-
-### Build and Run Locally
-
-```bash
-# Build the Docker image
-docker build -t flask-ecs-app .
-
-# Run the container locally
-docker run -d -p 5000:5000 flask-ecs-app
-```
-
-The application will be accessible at `http://localhost:5000`.
-
-### Dependency Management
-
-Lock dependencies in `requirements.txt`:
-
-```bash
-uv pip compile pyproject.toml -o requirements.txt
-```
-
-### Manual Build and Push to ECR
-
-If you need to manually build and push an image to ECR (for testing or troubleshooting), follow these steps:
-
-```bash
-# Get your AWS account ID
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-# Login to ECR - authenticate Docker to your private ECR registry
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin \
-  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
-
-# Build the image for linux/amd64 platform (required for ECS)
-# We use buildx to ensure cross-platform compatibility
-# Option 1: Build using standard Dockerfile (traditional pip-based installation)
-docker buildx build --platform linux/amd64 -t flask-ecs-app .
-
-# Option 2: Build using Dockerfile with UV package manager (faster builds)
-docker buildx build --platform linux/amd64 -f Dockerfile-uv -t flask-ecs-app .
-
-# Tag the image with your ECR repository URL
-# This formats the image name to match ECR's naming convention
-docker tag flask-ecs-app:latest \
-  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
-
-# Push the image to ECR so ECS can pull it during deployment
-docker push $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
-```
-
-**Note:** The `--platform linux/amd64` flag is important because ECS tasks run on Linux AMD64 architecture. Without this flag, images built on Apple Silicon (ARM) Macs won't run correctly on ECS.
-
-## Testing
-
-Once the container is running locally, you can test the endpoints:
-
-```bash
-# Test the default route
-curl http://localhost:5000/
-
-# Test the health check endpoint
-curl http://localhost:5000/health
-```
-
-Both endpoints return JSON responses.
-
 ## Deployment
 
 ### Prerequisites
@@ -248,6 +168,86 @@ aws ecs update-express-gateway-service \
     "image": "'${AWS_ACCOUNT_ID}'.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest"
   }'
 ```
+
+## Development
+
+### Requirements
+
+Before you begin, ensure you have the following tools installed:
+
+- **Python 3.14+** - The application runtime
+- **Docker** - For containerization and local testing
+- **[uv](https://docs.astral.sh/uv/)** - Fast Python package installer and resolver (for dependency management)
+- **AWS CLI** - For interacting with AWS services during deployment (optional for local dev)
+
+Optional tools:
+- **[docker buildx](https://docs.docker.com/buildx/working-with-buildx/)** - For multi-platform builds (usually included with Docker Desktop)
+
+### Build and Run Locally
+
+```bash
+# Build the Docker image
+docker build -t flask-ecs-app .
+
+# Run the container locally
+docker run -d -p 5000:5000 flask-ecs-app
+```
+
+The application will be accessible at `http://localhost:5000`.
+
+### Dependency Management
+
+Lock dependencies in `requirements.txt`:
+
+```bash
+uv pip compile pyproject.toml -o requirements.txt
+```
+
+### Manual Build and Push to ECR
+
+If you need to manually build and push an image to ECR (for testing or troubleshooting), follow these steps:
+
+```bash
+# Get your AWS account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# Login to ECR - authenticate Docker to your private ECR registry
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin \
+  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+
+# Build the image for linux/amd64 platform (required for ECS)
+# We use buildx to ensure cross-platform compatibility
+# Option 1: Build using standard Dockerfile (traditional pip-based installation)
+docker buildx build --platform linux/amd64 -t flask-ecs-app .
+
+# Option 2: Build using Dockerfile with UV package manager (faster builds)
+docker buildx build --platform linux/amd64 -f Dockerfile-uv -t flask-ecs-app .
+
+# Tag the image with your ECR repository URL
+# This formats the image name to match ECR's naming convention
+docker tag flask-ecs-app:latest \
+  $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
+
+# Push the image to ECR so ECS can pull it during deployment
+docker push $AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/flask-ecs-example:latest
+```
+
+**Note:** The `--platform linux/amd64` flag is important because ECS tasks run on Linux AMD64 architecture. Without this flag, images built on Apple Silicon (ARM) Macs won't run correctly on ECS.
+
+## Testing
+
+Once the container is running locally, you can test the endpoints:
+
+```bash
+# Test the default route
+curl http://localhost:5000/
+
+# Test the health check endpoint
+curl http://localhost:5000/health
+```
+
+Both endpoints return JSON responses.
 
 ## Troubleshooting
 
