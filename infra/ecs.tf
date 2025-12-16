@@ -1,3 +1,7 @@
+# ECS Cluster
+# resource "aws_ecs_cluster" "example" {
+#   name = "flask-ecs-cluster"
+# }
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "app" {
@@ -12,13 +16,15 @@ resource "aws_ecs_express_gateway_service" "example" {
   execution_role_arn      = aws_iam_role.ecs_task_execution_role.arn
   infrastructure_role_arn = aws_iam_role.ecs_infrastructure_role_for_express_services.arn
   health_check_path       = "/health"
+  # cluster                 = aws_ecs_cluster.example.arn
 
   primary_container {
     image          = var.application_image
     container_port = var.application_port
 
     aws_logs_configuration {
-      log_group = aws_cloudwatch_log_group.app.name
+      log_group         = aws_cloudwatch_log_group.app.name
+      log_stream_prefix = "flask-ecs2-"
     }
 
     dynamic "environment" {

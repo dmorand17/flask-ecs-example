@@ -1,0 +1,44 @@
+# AWS Region
+region = "us-east-1"
+
+# VPC Configuration
+vpc_id = "vpc-0123456789abcdef0"
+
+# Application Subnets (private subnets recommended for ECS tasks)
+application_subnet_ids = [
+  "subnet-0123456789abcdef0",
+  "subnet-0123456789abcdef1",
+  "subnet-0123456789abcdef2"
+]
+
+# Application Container Configuration
+application_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/flask-app:latest"
+application_port  = "8080"
+
+# ECS Service Scaling
+application_desired_count = 2
+application_max_count     = 4
+
+# CloudWatch Logs
+log_retention_in_days = 30
+
+# Application Environment Variables
+application_env_vars = {
+  ENVIRONMENT = "production"
+  LOG_LEVEL   = "info"
+  APP_NAME    = "flask-ecs-example"
+}
+
+# Application Secrets (stored in AWS Secrets Manager or SSM Parameter Store)
+application_env_secrets = {
+  DATABASE_URL = "arn:aws:secretsmanager:us-east-1:123456789012:secret:database-url-abc123"
+  API_KEY      = "arn:aws:ssm:us-east-1:123456789012:parameter/api-key"
+}
+
+# Additional Tags
+additional_tags = {
+  Project     = "flask-ecs-example"
+  Environment = "production"
+  ManagedBy   = "terraform"
+  Owner       = "platform-team"
+}

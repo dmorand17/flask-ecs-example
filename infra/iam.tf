@@ -1,6 +1,6 @@
 # ECS Task Execution Role
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecsTaskExecutionRole"
+  name = "ecsTaskExecutionRole2"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -16,7 +16,7 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   })
 
   tags = {
-    Name = "ecsTaskExecutionRole"
+    Name = "ecsTaskExecutionRole2"
   }
 }
 
@@ -28,7 +28,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
 
 # ECS Infrastructure Role for Express Services
 resource "aws_iam_role" "ecs_infrastructure_role_for_express_services" {
-  name = "ecsInfrastructureRoleForExpressServices"
+  name = "ecsInfrastructureRoleForExpressServices2"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -45,7 +45,7 @@ resource "aws_iam_role" "ecs_infrastructure_role_for_express_services" {
   })
 
   tags = {
-    Name = "ecsInfrastructureRoleForExpressServices"
+    Name = "ecsInfrastructureRoleForExpressServices2"
   }
 }
 
