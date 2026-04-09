@@ -1,0 +1,100 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner type"
+        required: true
+        default: "ubuntu-24.04-arm"
+        type: choice
+        options:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+
+jobs:
+  build-and-deploy:
+    runs-on: ${{ github.event.inputs.runner || vars.RUNNER_TYPE || 'ubuntu-24.04-arm' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+        # https://aws.amazon.com/blogs/security/use-iam-roles-to-connect-github-actions-to-actions-in-aws/
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ASSUME_ROLE_ARN }} # might want to port this to 'secrets'
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: us-east-1
+
+      # - name: Terraform Init
+      #   working-directory: infra
+      #   run: terraform init
+
+      # - name: Terraform Apply
+      #   working-directory: infra
+      #   run: terraform apply
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: "true"
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: latest
+          REPOSITORY: nodeapp
+        run: |
+          # Build a docker container and
+          # push it to ECR so that it can
+          # be deployed to ECS.
+          docker build -t $ECR_REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: fastapi-app-task-definition.json
+          container-name: fastapi-app
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: fastapi-app-service
+          cluster: FastApiCluster
+          wait-for-service-stability: true
+
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [plan, apply]
+    if: always()
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.apply.result }}" == "success" ]; then
+            echo "Deployment successful"
+          elif [ "${{ needs.plan.outputs.plan-exists }}" == "false" ]; then
+            echo "No changes detected"
+          else
+            echo "Deployment failed"
+          fi
